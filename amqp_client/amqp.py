@@ -15,14 +15,30 @@ class ChannelContext(object):
         Make channels poll and reuse it
     '''
 
-    def __init__(self, connection):
+    def __init__(self, connection, hold=False, reuse=False):
         self.connection = connection
+        self.reuse = reuse
+        self.hold = hold
 
     async def __aenter__(self):
-        channel = await self.connection.channel()
-        return channel
+        try:
+            channel_id = self.connection.reuse_channel_ids.pop()
+            self.channel = self.connection.channels[channel_id]
+        except KeyError:
+            self.channel = await self.connection.channel()
+
+        return self.channel
 
     async def __aexit__(self, type, value, traceback):
+        if self.hold:
+            LOG.info('Hold channel %s', self.channel.channel_id)
+            return True
+
+        if self.reuse:
+            self.connection.reuse_channel_ids.add(self.channel.channel_id)
+        else:
+            await self.channel.close()
+
         return True
 
 
@@ -36,8 +52,12 @@ class AMQPProtocol(ProtocolConsumer):
 
     async def make_operation(self, operation, *args, **kwargs):
         result = None
-        async with ChannelContext(self.connection) as channel:
+        hold = operation == 'basic_consume'
+        reuse = operation == 'basic_publish'
+
+        async with ChannelContext(self.connection, hold, reuse) as channel:
             result = await getattr(channel, operation)(*args, **kwargs)
+
         self.finished(result)
 
 
@@ -161,6 +181,7 @@ class AMQPClient(AbstractClient):
             await asyncio.sleep(5)
             connection = await self.connect(protocol_factory, reconnect + 1)
 
+        connection.reuse_channel_ids = set()
         return connection
 
     async def execute(self, operation, *args, **kwargs):

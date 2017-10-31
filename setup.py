@@ -4,13 +4,13 @@ from setuptools import setup
 
 setup(
     name='pulsar-amqp',
-    version='0.1.0',
+    version='0.2.0',
     author='Dmitriy Vlasov',
     author_email='scailer@yandex.ru',
 
     packages=['amqp_client'],
     include_package_data=True,
-    install_requires=['aioamqp==0.8.2'],
+    #install_requires=['aioamqp==0.10.0'],
     requires=['aioamqp', 'pulsar (>= 1.5.4)'],
 
     url='https://github.com/scailer/pulsar-aioamqp',
