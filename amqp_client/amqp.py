@@ -102,6 +102,8 @@ class AMQPConnection(Connection, aioamqp.AmqpProtocol):
 
 
 class FakeAMQPConnection(AMQPConnection):
+    reuse_channel_ids = set()
+
     async def channel(self):
         return FakeChannel(self)
 
