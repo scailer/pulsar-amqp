@@ -18,7 +18,7 @@ class FakeChannel(object):
     def __init__(self, connection):
         self.connection = connection
 
-    def __getattr__(self, name):
+    def __getattribute__(self, name):
         if name in CHANNEL_METHODS:
             return self.execute
         return super().__getattr__(name)

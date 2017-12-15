@@ -4,7 +4,7 @@ from setuptools import setup
 
 setup(
     name='pulsar-amqp',
-    version='0.2.1',
+    version='0.2.2',
     author='Dmitriy Vlasov',
     author_email='scailer@yandex.ru',
 
