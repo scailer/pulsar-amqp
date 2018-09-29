@@ -2,8 +2,7 @@ import aioamqp
 import asyncio
 import logging
 
-from pulsar import ProtocolConsumer, Connection
-from pulsar import ensure_future, AbstractClient, Pool
+from pulsar.api import ensure_future, AbstractClient, Pool, ProtocolConsumer, Connection
 from functools import partial
 from .fake import FakeTransport, FakeChannel
 
