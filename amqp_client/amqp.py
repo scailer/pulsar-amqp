@@ -45,7 +45,7 @@ class AMQPProtocol(ProtocolConsumer):
     ''' Proxy to channel '''
 
     def start_request(self):
-        operation, args, kwargs = self._request
+        operation, args, kwargs = self.request
         func = getattr(self, operation, self.make_operation)
         ensure_future(func(operation, *args, **kwargs), loop=self._loop)
 
@@ -57,7 +57,8 @@ class AMQPProtocol(ProtocolConsumer):
         async with ChannelContext(self.connection, hold, reuse) as channel:
             result = await getattr(channel, operation)(*args, **kwargs)
 
-        self.finished(result)
+        self.response = result
+        self.event('post_request').fire()
 
 
 class AMQPConnection(Connection, aioamqp.AmqpProtocol):
@@ -90,8 +91,8 @@ class AMQPConnection(Connection, aioamqp.AmqpProtocol):
     async def execute(self, operation, *args, **kwargs):
         consumer = self.current_consumer()
         consumer.start((operation, args, kwargs))
-        result = await consumer.on_finished
-        return result
+        await consumer.event('post_request').waiter()
+        return consumer.response
 
     async def consume(self, *args, **kwargs):
         LOG.debug('Add consumer: %s', args)
@@ -163,12 +164,15 @@ class AMQPClient(AbstractClient):
         connection.connection_made(FakeTransport())
         return connection
 
+    def create_protocol(self, *args, loop=None, **kwargs):
+        return partial(AMQPConnection, AMQPProtocol)(self, *args, **kwargs)
+        return self.protocol_factory
+
     async def connect(self, protocol_factory=None, reconnect=0):
         LOG.debug('New AMQP connection')
-        protocol_factory = protocol_factory or self.create_protocol
 
         try:
-            fut = aioamqp.from_url(self.dsn, protocol_factory=protocol_factory)
+            fut = aioamqp.from_url(self.dsn, protocol_factory=self.create_protocol)
             transport, connection = await fut
 
         except Exception as e:
@@ -180,14 +184,14 @@ class AMQPClient(AbstractClient):
                 return
 
             await asyncio.sleep(5)
-            connection = await self.connect(protocol_factory, reconnect + 1)
+            connection = await self.connect(self.create_protocol, reconnect + 1)
 
         connection.reuse_channel_ids = set()
         return connection
 
     async def execute(self, operation, *args, **kwargs):
         connection = await self.pool.connect()
-        with connection:
+        async with connection:
             result = await connection.execute(operation, *args, **kwargs)
             return result
 
@@ -236,7 +240,7 @@ class AMQPClient(AbstractClient):
 
     async def basic_consume(self, callback, queue_name='', **kwargs):
         connection = await self.pool.connect()
-        with connection:
+        async with connection:
             result = await connection.consume(callback, queue_name, **kwargs)
             return result
 
